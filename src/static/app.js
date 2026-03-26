@@ -4,6 +4,95 @@ document.addEventListener("DOMContentLoaded", () => {
   const signupForm = document.getElementById("signup-form");
   const messageDiv = document.getElementById("message");
 
+  // Auth state
+  let authToken = sessionStorage.getItem("authToken") || null;
+  let authUsername = sessionStorage.getItem("authUsername") || null;
+
+  // Auth UI elements
+  const userDropdown = document.getElementById("user-dropdown");
+  const loginBtn = document.getElementById("login-btn");
+  const logoutBtn = document.getElementById("logout-btn");
+  const loggedInUser = document.getElementById("logged-in-user");
+  const loginModal = document.getElementById("login-modal");
+  const loginForm = document.getElementById("login-form");
+  const loginError = document.getElementById("login-error");
+  const cancelLoginBtn = document.getElementById("cancel-login-btn");
+  const signupContainer = document.getElementById("signup-container");
+
+  function updateAuthUI() {
+    if (authToken) {
+      loggedInUser.textContent = `👤 ${authUsername}`;
+      loggedInUser.classList.remove("hidden");
+      loginBtn.classList.add("hidden");
+      logoutBtn.classList.remove("hidden");
+      signupContainer.classList.remove("hidden");
+    } else {
+      loggedInUser.classList.add("hidden");
+      loginBtn.classList.remove("hidden");
+      logoutBtn.classList.add("hidden");
+      signupContainer.classList.add("hidden");
+    }
+    // Refresh to show/hide delete buttons
+    fetchActivities();
+  }
+
+  loginBtn.addEventListener("click", () => {
+    loginModal.classList.remove("hidden");
+  });
+
+  cancelLoginBtn.addEventListener("click", () => {
+    loginModal.classList.add("hidden");
+    loginForm.reset();
+    loginError.classList.add("hidden");
+  });
+
+  loginForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const username = document.getElementById("username").value;
+    const password = document.getElementById("password").value;
+    loginError.classList.add("hidden");
+
+    try {
+      const response = await fetch("/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        authToken = data.token;
+        authUsername = data.username;
+        sessionStorage.setItem("authToken", authToken);
+        sessionStorage.setItem("authUsername", authUsername);
+        loginModal.classList.add("hidden");
+        loginForm.reset();
+        updateAuthUI();
+      } else {
+        const err = await response.json();
+        loginError.textContent = err.detail || "Login failed";
+        loginError.classList.remove("hidden");
+      }
+    } catch {
+      loginError.textContent = "Login failed. Please try again.";
+      loginError.classList.remove("hidden");
+    }
+  });
+
+  logoutBtn.addEventListener("click", async () => {
+    if (authToken) {
+      await fetch("/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+    }
+    authToken = null;
+    authUsername = null;
+    sessionStorage.removeItem("authToken");
+    sessionStorage.removeItem("authUsername");
+    updateAuthUI();
+  });
+
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
@@ -30,7 +119,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 ${details.participants
                   .map(
                     (email) =>
-                      `<li><span class="participant-email">${email}</span><button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button></li>`
+                      `<li><span class="participant-email">${email}</span>${authToken ? `<button class="delete-btn" data-activity="${name}" data-email="${email}">❌</button>` : ""}</li>`
                   )
                   .join("")}
               </ul>
@@ -80,6 +169,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/unregister?email=${encodeURIComponent(email)}`,
         {
           method: "DELETE",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         }
       );
 
@@ -124,6 +214,7 @@ document.addEventListener("DOMContentLoaded", () => {
         )}/signup?email=${encodeURIComponent(email)}`,
         {
           method: "POST",
+          headers: authToken ? { Authorization: `Bearer ${authToken}` } : {},
         }
       );
 
@@ -156,5 +247,5 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // Initialize app
-  fetchActivities();
+  updateAuthUI();
 });
